@@ -16,13 +16,20 @@ FOG_COLOR = (30, 30, 30, 255)  # 添加alpha通道
 # 设置游戏窗口
 WINDOW_SIZE = (800, 600)
 screen = pygame.display.set_mode(WINDOW_SIZE)
-pygame.display.set_caption('迷宫游戏')
+pygame.display.set_caption('期末惊魂')
+icon = pygame.image.load('./images/user-guide.png')
+pygame.display.set_icon(icon)
 
 # 定义网格大小
 CELL_SIZE = 40
 GRID_WIDTH = WINDOW_SIZE[0] // CELL_SIZE
 GRID_HEIGHT = WINDOW_SIZE[1] // CELL_SIZE
 
+# 加载墙壁图片
+wall_image = pygame.image.load('./images/wall.png')
+wall_image = pygame.transform.scale(wall_image, (CELL_SIZE, CELL_SIZE))  # 缩放至单个格子大小
+floor_image=pygame.image.load('./images/floor.png')
+floor_image=pygame.transform.scale(floor_image, (CELL_SIZE, CELL_SIZE))
 # 创建迷雾层
 fog_surface = pygame.Surface(WINDOW_SIZE, pygame.SRCALPHA)
 VISION_RADIUS = 3  # 可视范围半径（以格子为单位）
@@ -40,6 +47,23 @@ class Player:
         self.move_speed = 5
         self.is_moving = False
         self.move_direction = (0, 0)  # 当前移动方向
+        self.facing = 'down'  # 初始朝向
+        
+        # 加载玩家图片
+        self.images = {
+            'up': pygame.image.load('./images/player_up.png'),
+            'down': pygame.image.load('./images/player_down.png'),
+            'left': pygame.image.load('./images/player_left.png'),
+            'right': pygame.image.load('./images/player_right.png')
+        }
+        
+        # 调整图片大小以适应网格
+        for direction in self.images:
+            self.images[direction] = pygame.transform.scale(
+                self.images[direction], 
+                (self.size, self.size)
+            )
+        
         # 视野中心点
         self.vision_center_x = self.visual_x + self.size // 2
         self.vision_center_y = self.visual_y + self.size // 2
@@ -55,8 +79,20 @@ class Player:
             self.target_y = new_y * CELL_SIZE + 2
             self.is_moving = True
             self.move_direction = (dx, dy)
+            
+            # 更新朝向
+            if dx > 0: self.facing = 'right'
+            elif dx < 0: self.facing = 'left'
+            elif dy > 0: self.facing = 'down'
+            elif dy < 0: self.facing = 'up'
+            
             return True
         return False
+
+    def draw(self, screen):
+        # 使用当前朝向的图片绘制角色
+        screen.blit(self.images[self.facing], 
+                   (self.visual_x, self.visual_y))
 
     def update(self, maze):
         # 处理连续移动
@@ -94,11 +130,7 @@ class Player:
             self.vision_center_x = self.visual_x + self.size // 2
             self.vision_center_y = self.visual_y + self.size // 2
 
-    def draw(self, screen):
-        pygame.draw.rect(screen, RED,
-                        (self.visual_x,
-                         self.visual_y,
-                         self.size, self.size))
+    
 
     def update_vision(self):
         # 更新迷雾效果
@@ -116,30 +148,23 @@ class Player:
         vision_size = VISION_RADIUS * CELL_SIZE
         
         # 创建渐变视野效果
-        for radius in range(vision_size, 0, -1):
-            alpha = int(255 * (radius / vision_size))
-            alpha = max(0, min(255, alpha))
-            temp_surface = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
-            pygame.draw.circle(temp_surface, (0, 0, 0, alpha), 
-                             (radius, radius), radius)
-            fog_surface.blit(temp_surface, 
-                            (center_x - radius, center_y - radius), 
-                            special_flags=pygame.BLEND_RGBA_SUB)
 
 class Item:
-    def __init__(self, x, y):
+    def __init__(self, x, y,popup_image_path):
         self.x = x
         self.y = y
         self.collected = False
-        self.size = CELL_SIZE // 2
-    
+        self.size = CELL_SIZE // 1
+        self.image = pygame.image.load('./images/book.png').convert_alpha()
+        self.image = pygame.transform.scale(self.image, (self.size, self.size))
+
+        self.popup_image =pygame.image.load(popup_image_path).convert_alpha()
+        self.popup_image = pygame.transform.scale(self.popup_image, (400,300))
     def draw(self, screen):
         if not self.collected:
-            pygame.draw.circle(screen, YELLOW,
-                             (self.x * CELL_SIZE + CELL_SIZE // 2,
-                              self.y * CELL_SIZE + CELL_SIZE // 2),
-                             self.size // 2)
-
+           draw_x = self.x * CELL_SIZE + CELL_SIZE // 2 - self.size // 2
+           draw_y = self.y * CELL_SIZE + CELL_SIZE // 2 - self.size // 2
+           screen.blit(self.image, (draw_x, draw_y))
 # 生成迷宫（简单版本）
 def create_maze():
     # 初始化迷宫，全部都是通道
@@ -207,12 +232,18 @@ def create_maze():
 # 生成物品
 def create_items():
     items = []
-    for _ in range(4):  # 创建4个物品
+    popup_images=[
+        './images/popup1.png',
+        './images/popup2.png',
+        './images/popup3.png',
+        './images/popup4.png'
+    ]
+    for i in range(4):  # 创建4个物品
         while True:
             x = random.randint(1, GRID_WIDTH-2)
             y = random.randint(1, GRID_HEIGHT-2)
             if maze[y][x] == 0 and not any(item.x == x and item.y == y for item in items):
-                items.append(Item(x, y))
+                items.append(Item(x, y,popup_images[i]))
                 break
     return items
 
@@ -221,6 +252,8 @@ maze = create_maze()
 player = Player(1, 1)
 items = create_items()
 
+popup_mode = False
+current_popup_image =None
 # 游戏主循环
 running = True
 clock = pygame.time.Clock()
@@ -230,6 +263,34 @@ while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
+            
+    # 如果处于弹窗模式
+    if popup_mode and current_popup_image:
+        # 弹窗背景（半透明遮罩）
+        overlay = pygame.Surface(WINDOW_SIZE)
+        overlay.set_alpha(180)
+        overlay.fill(BLACK)
+        screen.blit(overlay, (0, 0))
+
+        # 弹出大图（居中显示）
+        rect = current_popup_image.get_rect(center=(WINDOW_SIZE[0] // 2, WINDOW_SIZE[1] // 2))
+        screen.blit(current_popup_image, rect)
+
+        pygame.display.flip()
+
+        # 暂停输入等待玩家按键关闭弹窗
+        waiting = True
+        while waiting:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+                    waiting = False
+                elif event.type == pygame.KEYDOWN or event.type == pygame.MOUSEBUTTONDOWN:
+                    popup_mode = False
+                    current_popup_image = None
+                    waiting = False
+            clock.tick(60)
+        continue  # 跳过本帧后续逻辑
 
     # 更新玩家位置和状态
     player.update(maze)
@@ -239,6 +300,10 @@ while running:
         if not item.collected and player.x == item.x and player.y == item.y:
             item.collected = True
             player.progress += 1
+
+            popup_mode = True
+            current_popup_image = item.popup_image
+            break
     
     # 检查是否到达终点
     if (player.x == GRID_WIDTH-2 and player.y == GRID_HEIGHT-2):
@@ -255,10 +320,9 @@ while running:
     for y in range(GRID_HEIGHT):
         for x in range(GRID_WIDTH):
             if maze[y][x] == 1:
-                pygame.draw.rect(screen, BLUE,
-                               (x * CELL_SIZE, y * CELL_SIZE,
-                                CELL_SIZE, CELL_SIZE))
-    
+                screen.blit(wall_image, (x * CELL_SIZE, y * CELL_SIZE))
+            if maze[y][x] == 0:
+                screen.blit(floor_image, (x * CELL_SIZE, y * CELL_SIZE))
     # 绘制物品
     for item in items:
         item.draw(screen)
