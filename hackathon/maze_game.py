@@ -1,5 +1,6 @@
 import pygame
 import random
+import sys
 
 # 初始化Pygame
 pygame.init()
@@ -25,6 +26,7 @@ pygame.display.set_icon(icon)
 CELL_SIZE = 40
 GRID_WIDTH = WINDOW_SIZE[0] // CELL_SIZE
 GRID_HEIGHT = WINDOW_SIZE[1] // CELL_SIZE
+
 
 # 加载墙壁图片
 wall_image = pygame.image.load('./images/wall.png')
@@ -173,18 +175,33 @@ class SpecialTile:
         self.y = y
         self.triggered = False  # 是否已触发过
         self.collected_triggered = False  # 收集齐物品后是否触发过
+        
+        # 加载门的图片(替代原来的绿色矩形)
+        self.door_image = pygame.image.load('./images/door.png').convert_alpha()
+        self.door_image = pygame.transform.scale(self.door_image, (CELL_SIZE, CELL_SIZE))
+        
         # 加载特殊格子弹出的图片
         self.popup_image = pygame.image.load('./images/door.png').convert_alpha()
         self.popup_image = pygame.transform.scale(self.popup_image, (400, 300))
+        
         # 加载收集齐物品后的图片
         self.end_image = pygame.image.load(end_image_path).convert_alpha()
         self.end_image = pygame.transform.scale(self.end_image, (400, 300))
 
     def draw(self, screen):
-        # 绘制一个和终点相似的格子
-        pygame.draw.rect(screen, GREEN,
-                        (self.x * CELL_SIZE, self.y * CELL_SIZE,
-                         CELL_SIZE, CELL_SIZE))
+        # 先绘制棕色边框
+        BROWN = (139, 69, 19)  # 定义棕色RGB值
+        border_rect = pygame.Rect(
+            self.x * CELL_SIZE - 2,  # 向外扩展2像素
+            self.y * CELL_SIZE - 2, 
+            CELL_SIZE + 4,  # 宽度增加4像素
+            CELL_SIZE + 4   # 高度增加4像素
+        )
+        pygame.draw.rect(screen, BROWN, border_rect, 2)  # 2是边框宽度
+        
+        # 然后绘制门的图片
+        screen.blit(self.door_image, 
+                   (self.x * CELL_SIZE, self.y * CELL_SIZE))
 
 # 生成迷宫（简单版本）
 def create_maze():
@@ -273,19 +290,12 @@ maze = create_maze()
 player = Player(1, 1)
 items = create_items()
 
-# 随机选择并播放一个背景音乐
-audio_files = [
-    './audio/audio1.mp3',
-    './audio/audio2.mp3',
-    './audio/audio3.mp3'
-]
-# 随机打乱音频列表顺序
-random.shuffle(audio_files)
-current_audio_index = 0
-pygame.mixer.music.load(audio_files[current_audio_index])
-pygame.mixer.music.play()
-last_audio_time = pygame.time.get_ticks()
-next_audio_delay = random.uniform(0, 0)
+# 音频文件
+audio_files = ['./audio/audio2.mp3']
+
+# 加载并循环播放背景音乐
+pygame.mixer.music.load(audio_files[0])
+pygame.mixer.music.play(-1)  # -1表示循环播放
 
 # 创建特殊格子（随机放置在迷宫中）
 special_tile1 = SpecialTile(GRID_WIDTH-2, GRID_HEIGHT-2, './images/killed.png')  # 将第一个特殊格子设置为终点位置
@@ -360,17 +370,17 @@ while running:
         running = False
         continue
 
-    # 检查是否需要播放下一个音频
-    current_time = pygame.time.get_ticks()
-    if not pygame.mixer.music.get_busy():
-        # 当前音频播放完毕后，等待1-2秒
-        pygame.time.wait(random.randint(1000, 2000))
-        # 随机选择一个音频文件播放（不重复上一个）
-        prev_audio_index = current_audio_index
-        while current_audio_index == prev_audio_index:
-            current_audio_index = random.randint(0, len(audio_files) - 1)
-        pygame.mixer.music.load(audio_files[current_audio_index])
-        pygame.mixer.music.play()
+    # # 检查是否需要播放下一个音频
+    # current_time = pygame.time.get_ticks()
+    # if not pygame.mixer.music.get_busy():
+    #     # 当前音频播放完毕后，等待1-2秒
+    #     pygame.time.wait(random.randint(1000, 2000))
+    #     # 随机选择一个音频文件播放（不重复上一个）
+    #     prev_audio_index = current_audio_index
+    #     while current_audio_index == prev_audio_index:
+    #         current_audio_index = random.randint(0, len(audio_files) - 1)
+    #    pygame.mixer.music.load(audio_files[0])
+    #   pygame.mixer.music.play()
 
     # 更新玩家位置和状态
     player.update(maze)
@@ -427,10 +437,63 @@ while running:
     # 检查是否到达终点
     if (player.x == GRID_WIDTH-2 and player.y == GRID_HEIGHT-2):
         if player.progress >= 4:
-            # 显示killed.png而不是打印"恭喜通关"
-            popup_mode = True
-            current_popup_image = pygame.image.load('./images/killed.png').convert_alpha()
-            current_popup_image = pygame.transform.scale(current_popup_image, (400, 300))
+            input_font = pygame.font.Font(None, 36)
+            input_text = "请输入密码"
+            password = "3719"
+            input_active = True
+            cursor_visible = True
+            cursor_timer = 0
+            
+            while input_active:
+                current_time = pygame.time.get_ticks()
+                
+                # 每500毫秒切换光标显示状态
+                if current_time - cursor_timer > 500:
+                    cursor_visible = not cursor_visible
+                    cursor_timer = current_time
+                
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        running = False
+                        input_active = False
+                    elif event.type == pygame.KEYDOWN:
+                        if event.key == pygame.K_RETURN:
+                            if input_text == password:
+                                popup_mode = True
+                                current_popup_image = pygame.image.load('./images/killed.png').convert_alpha()
+                                current_popup_image = pygame.transform.scale(current_popup_image, (400, 300))
+                                input_active = False
+                            else:
+                                input_text = ""
+                        elif event.key == pygame.K_BACKSPACE:
+                            input_text = input_text[:-1]
+                        elif event.unicode.isnumeric() and len(input_text) < 4:  # 限制输入长度为4
+                            input_text += event.unicode
+                
+                # 绘制输入界面
+                screen.fill(BLACK)
+                
+                # 输入框背景
+                input_box = pygame.Rect(WINDOW_SIZE[0]//2 - 100, WINDOW_SIZE[1]//2, 200, 32)
+                pygame.draw.rect(screen, WHITE, input_box, 2)
+                
+                # 渲染文本
+                text_surface = input_font.render(input_text, True, WHITE)
+                prompt_surface = input_font.render("请输入4位密码:", True, WHITE)
+                
+                # 显示提示文本和输入的文本
+                screen.blit(prompt_surface, (WINDOW_SIZE[0]//2 - 100, WINDOW_SIZE[1]//2 - 50))
+                screen.blit(text_surface, (input_box.x + 5, input_box.y + 5))
+                
+                # 绘制闪烁的光标
+                if cursor_visible:
+                    cursor_x = input_box.x + 5 + text_surface.get_width()
+                    pygame.draw.line(screen, WHITE, 
+                                   (cursor_x, input_box.y + 5),
+                                   (cursor_x, input_box.y + 27), 2)
+                
+                pygame.display.flip()
+                clock.tick(60)
         else:
             # 弹出door.png
             popup_mode = True
