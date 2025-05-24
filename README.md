@@ -1,0 +1,1 @@
+# mazegame   is a mazegame
